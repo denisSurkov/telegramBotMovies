@@ -5,7 +5,7 @@ import logging
 from kinopoisk.movie import Movie
 from Main.consts_answers import Constants
 
-bot = telebot.TeleBot("561975156:AAFHPlz1kRTgOoCdudAT1tIktVvFKD1yWxI")
+bot = telebot.TeleBot("")
 
 @bot.message_handler(commands=["start", "help"])
 def greeting(message):
