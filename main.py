@@ -11,109 +11,134 @@ bot = telebot.TeleBot("")
 def greeting(message):
     bot.send_message(message.chat.id, Constants.greeting_msg)
 
-'''
-@bot.message_handler()
-def get_movie_by_msg(message):
-    film = message.text
-    list_of_movie = Movie.objects.search(film)
-    first_movie_id = list_of_movie[0].id
-    first_movie_obj = Movie(id=first_movie_id)
-    first_movie_obj.get_content("main_page")
-    first_movie_obj.get_content("posters")
+
+def get_film_by_id(film_id):
+    movie = Movie(id=int(film_id))
+    movie.get_content("main_page")
+
+    return movie
 
 
-    bot.send_message(message.chat.id, first_movie_obj.title + "\n" + first_movie_obj.plot)
-    bot.send_photo(message.chat.id, first_movie_obj.posters[0])
-'''
-def create_keyboard_films(name_film):
-    film_names = get_movie_by_name(name_film)
-    films_and_posters = get_posters_movies(film_names)
+async def load_posters(film_obj):
+    # СИЛЬНО ЗАТОРМАЖИВАЕТ РАБОТУ!!!!
+    # Пока не знаю как решить. Буду пробовать с asyncio
 
-    print(films_and_posters)
+    film_obj.get_content("posters")
+    return film_obj.posters[:1]
 
-    ready_elems = []
-    id_in = 0
+def get_full_data(id_of_film):
+    movie_obj = get_film_by_id(id_of_film)
+    movie_posters = yield from load_posters(movie_obj)
 
-    for film in films_and_posters:
-        new_elem = telebot.types.InlineQueryResultPhoto(
-            id=str(id_in),
-            photo_url=films_and_posters[film],
-            title=film
-        )
-        id_in += 1
-        ready_elems.append(ready_elems)
-
-    ready_elems.reverse()
-
-    print(ready_elems)
-
-    return ready_elems
-
-def get_movie_by_name(name):
-    list_of_movies = Movie.objects.search(name)
+    message_text = format_text(movie_obj.title, movie_obj)
 
 
-    if len(list_of_movies) > 10 or len(list_of_movies) == 0:
-        return list_of_movies[:5]
-        pass
+def format_text(film_name, movie_obj, format="short"):
+    message_text = "*Название:* _{0}_ \n".format(film_name)
+
+    if movie_obj.rating:
+        message_text += "*Рейтинги:* " + "⭐" * int(movie_obj.rating) + "\n\n"
+
+    if format == "short" and len(movie_obj.plot) > 100:
+        movie_obj.plot = movie_obj.plot[:100] + " ..."
+
+    message_text += "*Описание:* {0}".format(movie_obj.plot)
+
+    return message_text
+
+
+def create_keyboard_films(film_name):
+    film_names = get_movies_by_name(film_name)
+
+    if film_names:  # В случае, если вообще существуют такие фильмы.
+        movie_dict_data = get_movies_desc(*film_names)
+
+        ready_elems = []
+        id_in = 0
+
+        for film in movie_dict_data:
+            if movie_dict_data[film]:
+                movie_obj = movie_dict_data[film]
+
+                # Создание сообщения для краткого ответа
+                message_text = format_text(film_name=film, movie_obj=movie_obj)
+                message_content = telebot.types.InputTextMessageContent(message_text=message_text,
+                                                                        parse_mode="Markdown")
+
+                # Создание клавиатуры
+                kb = telebot.types.InlineKeyboardMarkup()
+                btn = telebot.types.InlineKeyboardButton(text="Открыть обсуждение",
+                                                         callback_data=str(movie_obj.id))
+                kb.add(btn)
+
+                # Новый элемент
+                new_elem = telebot.types.InlineQueryResultArticle(
+                    id=str(id_in),
+                    title=film,
+                    input_message_content=message_content,
+                    reply_markup=kb
+                )
+
+                id_in += 1
+                ready_elems.append(new_elem)
+            else:
+                continue
+
+        return ready_elems
     else:
-        return list_of_movies
+        return []
 
-def get_posters_movies(*films):
-    posters = {
 
-    }
+def get_movies_by_name(film_name):
+    # Получаем список фильмов по названию.
+    list_of_movies = Movie.objects.search(film_name)
 
-    print(films)
+    if list_of_movies:
+
+        if len(list_of_movies) > 4:
+            return list_of_movies[:4]
+
+        else:
+            return list_of_movies
+
+    else:
+        return []
+
+
+def get_movies_desc(*films):
+    # print(films)
+    dict_to_return = {}
 
     for film in films:
-        movie = Movie(id=film[0].id)
-
+        movie = Movie(id=film.id)
         movie.get_content("main_page")
-        movie.get_content("posters")
-        posters.update({
-                movie.title: movie.posters[0]
-            })
 
-    return posters
+        dict_to_return.update(
+            {
+                movie.title: movie
+            }
+        )
+
+    return dict_to_return
 
 
 @bot.inline_handler(lambda query: len(query.query) > 0)
 def query_text(query):
-    kb = telebot.types.InlineKeyboardMarkup()
-    print(query)
-    # Добавляем колбэк-кнопку с содержимым "test"
-    kb.add(telebot.types.InlineKeyboardButton(text="Нажми меня", callback_data="test"))
-    results = create_keyboard_films(query.query)
+    # print(query)
+    result = create_keyboard_films(query.query)
 
-    '''
-    smth = get_movie_by_name(query.query)
-    single_msg = telebot.types.InlineQueryResultArticle(
-        id="1", title="Press me",
-        input_message_content=telebot.types.InputTextMessageContent(message_text="Я – сообщение из инлайн-режима"),
-        reply_markup=kb
-    )
-    results.append(single_msg)
-    '''
-
-    bot.answer_inline_query(query.id, results)
+    bot.answer_inline_query(query.id, result)
 
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_inline(call):
     # Если сообщение из чата с ботом
     print(call)
+    movie_obj = get_film_by_id(call.data)
+    poster = yield from load_posters(movie_obj)
+    print(poster)
     bot.edit_message_text(inline_message_id=call.inline_message_id, text="Hello, guys!")
 
 
-    """
-    if call.message:
-        if call.data == "test":
-            bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Пыщь")
-    # Если сообщение из инлайн-режима
-    elif call.inline_message_id:
-        if call.data == "test":
-            bot.edit_message_text(inline_message_id=call.inline_message_id, text="Бдыщь")
-    """
 
 bot.polling(none_stop=True)
