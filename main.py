@@ -15,7 +15,6 @@ def greeting(message):
 def get_film_by_id(film_id):
     movie = Movie(id=int(film_id))
     movie.get_content("main_page")
-
     return movie
 
 
@@ -28,22 +27,20 @@ async def load_posters(film_obj):
 
 def get_full_data(id_of_film):
     movie_obj = get_film_by_id(id_of_film)
-    movie_posters = yield from load_posters(movie_obj)
+    movie_posters = load_posters(movie_obj)
 
     message_text = format_text(movie_obj.title, movie_obj)
 
 
 def format_text(film_name, movie_obj, format="short"):
     message_text = "*Название:* _{0}_ \n".format(film_name)
-
     if movie_obj.rating:
-        message_text += "*Рейтинги:* " + "⭐" * int(movie_obj.rating) + "\n\n"
+        message_text += "*Рейтинг:* " + "⭐" * int(movie_obj.rating) + "\n\n"
 
     if format == "short" and len(movie_obj.plot) > 100:
         movie_obj.plot = movie_obj.plot[:100] + " ..."
 
     message_text += "*Описание:* {0}".format(movie_obj.plot)
-
     return message_text
 
 
@@ -138,7 +135,6 @@ def callback_inline(call):
     poster = yield from load_posters(movie_obj)
     print(poster)
     bot.edit_message_text(inline_message_id=call.inline_message_id, text="Hello, guys!")
-
 
 
 bot.polling(none_stop=True)
